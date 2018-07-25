@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration monitorinterval="30" status="info" strict="true">
+    <Properties>
+        <property name="pattern"> [%d{yyyy-MM-dd HH:mm:ss}]%m%n</property>
+    </Properties>
+    <Appenders>
+        <Console name="stdout" target="SYSTEM_OUT">
+            <Layout type="PatternLayout" pattern="${pattern}"/>
+        </Console>
+        <File name="FaceRecognition" fileName="DigitRecognizer.log">
+            <Layout type="PatternLayout" pattern="${pattern}"/>
+        </File>
+    </Appenders>
+
+    <Loggers>
+        <Root level="debug">
+            <AppenderRef ref="stdout" level="info"/>
+            <AppenderRef ref="FaceRecognition" level="info"/>
+        </Root>
+    </Loggers>
+</Configuration>

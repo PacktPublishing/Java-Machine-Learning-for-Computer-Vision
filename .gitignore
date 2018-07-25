@@ -1,0 +1,6 @@
+*.log
+/.idea/
+/out/
+/*.iml
+/target/
+/HandWrittenDigitRecognizer/*.iml
