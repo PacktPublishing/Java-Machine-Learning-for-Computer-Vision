@@ -16,6 +16,7 @@
         <module>NeuralStyleTransfer</module>
         <module>FaceRecognition</module>
         <module>common</module>
+        <module>CarTracking</module>
     </modules>
 
     <properties>
