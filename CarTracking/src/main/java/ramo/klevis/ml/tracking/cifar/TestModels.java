@@ -3,11 +3,13 @@ package ramo.klevis.ml.tracking.cifar;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.datavec.image.loader.NativeImageLoader;
+import org.deeplearning4j.eval.Evaluation;
 import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.util.ModelSerializer;
 import org.jetbrains.annotations.NotNull;
 import org.nd4j.linalg.api.ndarray.INDArray;
-import ramo.klevis.ml.tracking.cifar.CifarImagePreProcessor;
+import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
+import ramo.klevis.ml.tracking.ImageUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,44 +28,43 @@ import java.util.Set;
 
 public class TestModels {
 
-    private static final String BASE = "AutonomousDriving/src/main/resources/models/";
-    private static final String TEST_DATA = "test_data";
+    private static final String BASE = "CarTracking/src/main/resources/models/";
+    private static final String TEST_DATA = "CarTracking/test_data";
     private static final double THRESHOLD = 0.85;
     private static final CifarImagePreProcessor IMAGE_PRE_PROCESSOR = new CifarImagePreProcessor();
     private static final int SIZE = 32;
     private static final NativeImageLoader LOADER = new NativeImageLoader(SIZE, SIZE, 3);
+    private static boolean showTrainingPrecision = true;
 
     public static void main(String[] args) throws IOException {
-        String[] array = new String[]{
-                "611_epoch_data_n1024d_b128_400.zip",
-                "611_epoch_data_n1024d_b128_505.zip",
-                "611_epoch_data_n1024d385.zip",
-                "611_epoch_data_n1024d390.zip",
-                "611_epoch_data_n1024d395.zip",
-                "611_epoch_data_n1024d400.zip",
-                "611_epoch_data_n1024d405.zip",
-                "611_epoch_data_n1024d_b64_520.zip",
-                "611_epoch_data_n1024d_b64_525.zip",
-                "611_epoch_data_n1024d_b64_530.zip",
-                "611_epoch_data_n1024d_b64_535.zip",
-                "611_epoch_data_n1024d_b64_540.zip",
-                "611_epoch_data_n1024d_b64_545.zip",
-                "611_epoch_data_n1024d_b64_550.zip",
-                "611_epoch_data_n1024d_b64_555.zip",
-                "611_epoch_data_n1024d_b64_560.zip",
-                "611_epoch_data_n1024d_b64_565.zip",
-                "611_epoch_data_n1024d_b64_570.zip",
-                "611_epoch_data_n1024d_b64_575.zip",
-                "611_epoch_data_n1024d_b64_580.zip"};
-        for (String s : array) {
+        String[] allModels = new File(BASE).list();
+        allModels = new String[]{"96_data.zip", "189_data_epoch_60.zip","189_epoch_data_n189d_b64_60.zip"};
+        for (String model : allModels) {
             ComputationGraph vgg16 = ModelSerializer.restoreComputationGraph(
-                    new File(BASE + s));
-            TestResult testResult = test(vgg16);
+                    new File(BASE + model));
+            String classesNumber = model.substring(0, model.indexOf("_"));
+            if (showTrainingPrecision) {
+                showTrainingPrecision(vgg16, classesNumber);
+            }
+            System.out.println(vgg16.summary());
+            TestResult testResult = test(vgg16, model);
             System.out.println(testResult);
         }
     }
 
-    public static TestResult test(ComputationGraph vgg16) throws IOException {
+    private static void showTrainingPrecision(ComputationGraph vgg16, String classesNumber) throws IOException {
+        File[] carTrackings = new File("CarTracking").listFiles();
+        for (File carTracking : carTrackings) {
+            if (carTracking.getName().contains(classesNumber)) {
+                DataSetIterator dataSetIterator = ImageUtils.createDataSetIterator(carTracking,
+                        Integer.parseInt(classesNumber), 64);
+                Evaluation eval = vgg16.evaluate(dataSetIterator);
+                System.out.println(eval.stats());
+            }
+        }
+    }
+
+    public static TestResult test(ComputationGraph vgg16, String model) throws IOException {
         HashMap<File, List<INDArray>> map = buildEmbeddings(vgg16);
 
         Set<Map.Entry<File, List<INDArray>>> entries = map.entrySet();
@@ -75,7 +76,9 @@ public class TestModels {
             wrongPredictionsInsideOneClassOrdered += compareInsideOneClassOrdered(entry);
             wrongPredictionsInsideOneClassNotOrdered += compareInsideOneClassNotOrdered(entry);
         }
-        return new TestResult(wrongPredictionsInsideOneClassOrdered,
+        return new TestResult(
+                model,
+                wrongPredictionsInsideOneClassOrdered,
                 wrongPredictionsInsideOneClassNotOrdered,
                 wrongPredictionsWithOtherClasses,
                 sum(wrongPredictionsWithOtherClasses,
@@ -164,8 +167,9 @@ public class TestModels {
     @AllArgsConstructor
     @Data
     static class TestResult {
-        int wrongPredictionsInsideOneClassOrdered;
-        int wrongPredictionsInsideOneClassNotOrdered;
+        String model;
+        int wrongPredictionsInsideOneClassSequentially;
+        int wrongPredictionsInsideOneClassNotSequentially;
         int wrongPredictionsWithOtherClasses;
         int total;
     }

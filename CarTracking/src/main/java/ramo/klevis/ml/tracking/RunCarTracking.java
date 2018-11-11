@@ -16,7 +16,7 @@ public class RunCarTracking {
     public static void main(String[] args) {
 
         ProgressBar progressBar = new ProgressBar(mainFrame, true);
-        progressBar.showProgressBar("Loading model this make take time for the 1 time!");
+        progressBar.showProgressBar("Loading models this make take time for the 1 time!");
         CarTrackingUI carTrackingUi = new CarTrackingUI();
         Executors.newCachedThreadPool().submit(() -> {
             try {

@@ -2,20 +2,34 @@ package ramo.klevis.ml.tracking;
 
 import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacpp.opencv_imgcodecs;
+import org.datavec.api.io.labels.ParentPathLabelGenerator;
+import org.datavec.api.split.FileSplit;
+import org.datavec.image.recordreader.ImageRecordReader;
+import org.deeplearning4j.datasets.datavec.RecordReaderDataSetIterator;
 import org.deeplearning4j.nn.layers.objdetect.DetectedObject;
+import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
+import ramo.klevis.ml.tracking.cifar.CifarImagePreProcessor;
+import ramo.klevis.ml.tracking.cifar.TrainCifar10Model;
 import ramo.klevis.ml.tracking.yolo.Speed;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+
+import static org.datavec.image.loader.CifarLoader.CHANNELS;
 
 /**
  * Created by klevis.ramo on 11/5/2018
  */
 
 public class ImageUtils {
+
+    public static final int HEIGHT = 32;
+    public static final int WIDTH = 32;
+    public static final ParentPathLabelGenerator LABEL_GENERATOR_MAKER = new ParentPathLabelGenerator();
 
     public static BufferedImage mat2BufferedImage(opencv_core.Mat matrix) throws Exception {
         ByteBuffer allocate = ByteBuffer.allocate(matrix.arraySize());
@@ -48,5 +62,14 @@ public class ImageUtils {
             ImageIO.write(subimage, "jpg", new File("AutonomousDriving/src/main/resources/videoFrames/"+ System.currentTimeMillis() + ".jpg"));
         }
         return subimage;
+    }
+
+    public static DataSetIterator createDataSetIterator(File sample,int numLabels,int batchSize) throws IOException {
+        ImageRecordReader imageRecordReader = new ImageRecordReader(HEIGHT, WIDTH, CHANNELS, LABEL_GENERATOR_MAKER);
+        imageRecordReader.initialize(new FileSplit(sample));
+        DataSetIterator iterator = new RecordReaderDataSetIterator(imageRecordReader, batchSize,
+                1, numLabels);
+        iterator.setPreProcessor(new CifarImagePreProcessor());
+        return iterator;
     }
 }

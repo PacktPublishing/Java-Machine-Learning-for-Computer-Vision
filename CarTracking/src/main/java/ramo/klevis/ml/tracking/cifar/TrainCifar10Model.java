@@ -1,11 +1,7 @@
 package ramo.klevis.ml.tracking.cifar;
 
 import org.bytedeco.javacpp.opencv_core;
-import org.datavec.api.io.labels.ParentPathLabelGenerator;
-import org.datavec.api.split.FileSplit;
 import org.datavec.image.loader.NativeImageLoader;
-import org.datavec.image.recordreader.ImageRecordReader;
-import org.deeplearning4j.datasets.datavec.RecordReaderDataSetIterator;
 import org.deeplearning4j.eval.Evaluation;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
 import org.deeplearning4j.nn.conf.GradientNormalization;
@@ -15,13 +11,13 @@ import org.deeplearning4j.nn.conf.graph.L2NormalizeVertex;
 import org.deeplearning4j.nn.conf.inputs.InputType;
 import org.deeplearning4j.nn.conf.layers.CenterLossOutputLayer;
 import org.deeplearning4j.nn.conf.layers.DenseLayer;
+import org.deeplearning4j.nn.conf.layers.DropoutLayer;
 import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.nn.layers.objdetect.DetectedObject;
 import org.deeplearning4j.nn.transferlearning.FineTuneConfiguration;
 import org.deeplearning4j.nn.transferlearning.TransferLearning;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.deeplearning4j.util.ModelSerializer;
-import org.deeplearning4j.zoo.PretrainedType;
 import org.deeplearning4j.zoo.ZooModel;
 import org.deeplearning4j.zoo.model.VGG16;
 import org.nd4j.linalg.activations.Activation;
@@ -39,24 +35,17 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 
-import static org.datavec.image.loader.CifarLoader.CHANNELS;
-
 public class TrainCifar10Model {
 
-    private static final int HEIGHT = 32;
-    private static final int WIDTH = 32;
+    public static final int NUM_POSSIBLE_LABELS = 611;
+    public static final int BATCH_SIZE = 64;
     private static final DataNormalization IMAGE_PRE_PROCESSOR = new CifarImagePreProcessor();
-    private static final ParentPathLabelGenerator LABEL_GENERATOR_MAKER = new ParentPathLabelGenerator();
-    private static final NativeImageLoader LOADER = new NativeImageLoader(HEIGHT, WIDTH, 3);
-
+    private static final NativeImageLoader LOADER = new NativeImageLoader(ImageUtils.HEIGHT, ImageUtils.WIDTH, 3);
     private static final String CONTENT_LAYER_NAME = "embeddings";
     private static final String MODEL_SAVE_PATH = "CarTracking/src/main/resources/models/";
-
-    private static final int NUM_POSSIBLE_LABELS = 611;
-    private static final int BATCH_SIZE = 64;
     private static final int SAVE_INTERVAL = 5;
     private static final int TEST_INTERVAL = 1;
-    private static final int EPOCH_TRAINING = 100;
+    private static final int EPOCH_TRAINING = 150;
     private ComputationGraph cifar10Transfer;
 
     public static void main(String[] args) throws IOException {
@@ -71,7 +60,9 @@ public class TrainCifar10Model {
     private void train() throws IOException {
 
         ZooModel zooModel = VGG16.builder().build();
-        ComputationGraph vgg16 = (ComputationGraph) zooModel.initPretrained(PretrainedType.CIFAR10);
+//        ComputationGraph vgg16 = (ComputationGraph) zooModel.initPretrained(PretrainedType.CIFAR10);
+        ComputationGraph vgg16 = ModelSerializer.restoreComputationGraph(
+                new File(MODEL_SAVE_PATH + "189_epoch_data_n189d_b64_120.zip"));
         System.out.println(vgg16.summary());
         IUpdater iUpdaterWithDefaultConfig = Updater.ADAM.getIUpdaterWithDefaultConfig();
         FineTuneConfiguration fineTuneConf = new FineTuneConfiguration.Builder()
@@ -88,29 +79,30 @@ public class TrainCifar10Model {
         ComputationGraph cifar10 = new TransferLearning.GraphBuilder(vgg16)
                 .setWorkspaceMode(WorkspaceMode.ENABLED)
                 .fineTuneConfiguration(fineTuneConf)
-                .setInputTypes(InputType.convolutionalFlat(HEIGHT, WIDTH, 3))
+                .setInputTypes(InputType.convolutionalFlat(ImageUtils.HEIGHT, ImageUtils.WIDTH, 3))
                 .removeVertexAndConnections("dense_2_loss")
                 .removeVertexKeepConnections("dense_2")
                 .removeVertexKeepConnections("dense_1")
-                .removeVertexKeepConnections("dropout_1")
+                .removeVertexKeepConnections("dropout")
                 .addLayer("dense_1", new DenseLayer.Builder()
                         .nIn(4096)
-                        .nOut(1024)
+                        .nOut(1280)
                         .activation(Activation.RELU).build(), "flatten_1")
-                .addVertex("embeddings", new L2NormalizeVertex(new int[]{}, 1e-12), "dense_1")
+                .addLayer("dropout",
+                        new DropoutLayer.Builder(0.5).build(), "dense_1")
+                .addVertex("embeddings", new L2NormalizeVertex(new int[]{}, 1e-12), "dropout")
                 .removeVertexKeepConnections("lossLayer")
                 .addLayer("lossLayer", new CenterLossOutputLayer.Builder()
                                 .lossFunction(LossFunctions.LossFunction.SQUARED_LOSS)
-                                .activation(Activation.SOFTMAX).nIn(1024).nOut(NUM_POSSIBLE_LABELS).lambda(1e-4).alpha(0.9)
+                                .activation(Activation.SOFTMAX).nIn(1280).nOut(NUM_POSSIBLE_LABELS).lambda(1e-4).alpha(0.9)
                                 .gradientNormalization(GradientNormalization.RenormalizeL2PerLayer).build(),
                         "embeddings")
                 .setOutputs("lossLayer")
                 .build();
         System.out.println(cifar10.summary());
-        File rootDir = new File("train_from_videos");
-        System.out.println(rootDir.getAbsolutePath());
-        DataSetIterator dataSetIterator = createDataSetIterator(rootDir);
-        DataSetIterator testIterator = createDataSetIterator(rootDir);
+        File rootDir = new File("CarTracking/train_from_video_"+NUM_POSSIBLE_LABELS);
+        DataSetIterator dataSetIterator = ImageUtils.createDataSetIterator(rootDir, NUM_POSSIBLE_LABELS, BATCH_SIZE);
+        DataSetIterator testIterator = ImageUtils.createDataSetIterator(rootDir, NUM_POSSIBLE_LABELS, BATCH_SIZE);
         cifar10.setListeners(new ScoreIterationListener(1));
         int iEpoch = 0;
         int iIteration = 0;
@@ -124,14 +116,14 @@ public class TrainCifar10Model {
                 }
                 cifar10.fit(trainMiniBatchData);
                 iIteration++;
-                System.out.println("iIteration = " + iIteration);
             }
             iEpoch++;
 
+            String modelName = NUM_POSSIBLE_LABELS + "_epoch_data_n" + NUM_POSSIBLE_LABELS + "d_b" + BATCH_SIZE + "_" + iEpoch + ".zip";
             if (iEpoch % SAVE_INTERVAL == 0) {
                 ModelSerializer.writeModel(cifar10,
                         new File(MODEL_SAVE_PATH +
-                                NUM_POSSIBLE_LABELS + "_epoch_data_n1024d_b256_" + iEpoch + ".zip"),
+                                modelName),
                         false);
             }
             if (iEpoch % TEST_INTERVAL == 0) {
@@ -139,20 +131,11 @@ public class TrainCifar10Model {
                 System.out.println(eval.stats());
                 testIterator.reset();
             }
-            TestModels.TestResult test = TestModels.test(cifar10);
+            TestModels.TestResult test = TestModels.test(cifar10, modelName);
             System.out.println("Test Results >> " + test);
             dataSetIterator.reset();
             System.out.println("iEpoch = " + iEpoch);
         }
-    }
-
-    private DataSetIterator createDataSetIterator(File sample) throws IOException {
-        ImageRecordReader imageRecordReader = new ImageRecordReader(HEIGHT, WIDTH, CHANNELS, LABEL_GENERATOR_MAKER);
-        imageRecordReader.initialize(new FileSplit(sample));
-        DataSetIterator iterator = new RecordReaderDataSetIterator(imageRecordReader, BATCH_SIZE,
-                1, NUM_POSSIBLE_LABELS);
-        iterator.setPreProcessor(new CifarImagePreProcessor());
-        return iterator;
     }
 
 
