@@ -13,13 +13,9 @@ import ramo.klevis.ml.tracking.ImageUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.stream.Stream;
 
 
 /**
@@ -32,21 +28,23 @@ public class TestModels {
     private static final String TEST_DATA = "CarTracking/test_data";
     private static final double THRESHOLD = 0.85;
     private static final CifarImagePreProcessor IMAGE_PRE_PROCESSOR = new CifarImagePreProcessor();
-    private static final int SIZE = 32;
-    private static final NativeImageLoader LOADER = new NativeImageLoader(SIZE, SIZE, 3);
-    private static boolean showTrainingPrecision = true;
+    private static final NativeImageLoader LOADER = new NativeImageLoader(ImageUtils.HEIGHT, ImageUtils.WIDTH, 3);
+    private static boolean showTrainingPrecision = false;
 
     public static void main(String[] args) throws IOException {
         String[] allModels = new File(BASE).list();
-        allModels = new String[]{"96_data.zip", "189_data_epoch_60.zip","189_epoch_data_n189d_b64_60.zip"};
+//        allModels = new String[]{"96_data.zip",
+//                "189_epoch_data_n189d_b64_135.zip",
+//                "611_epoch_data_e1024_b512_180.zip"};
         for (String model : allModels) {
             ComputationGraph vgg16 = ModelSerializer.restoreComputationGraph(
                     new File(BASE + model));
+
             String classesNumber = model.substring(0, model.indexOf("_"));
             if (showTrainingPrecision) {
                 showTrainingPrecision(vgg16, classesNumber);
             }
-            System.out.println(vgg16.summary());
+//            System.out.println(vgg16.summary());
             TestResult testResult = test(vgg16, model);
             System.out.println(testResult);
         }
@@ -65,12 +63,13 @@ public class TestModels {
     }
 
     public static TestResult test(ComputationGraph vgg16, String model) throws IOException {
-        HashMap<File, List<INDArray>> map = buildEmbeddings(vgg16);
+        Map<File, List<INDArray>> map = buildEmbeddings(vgg16);
 
         Set<Map.Entry<File, List<INDArray>>> entries = map.entrySet();
         int wrongPredictionsWithOtherClasses = 0;
         int wrongPredictionsInsideOneClassOrdered = 0;
         int wrongPredictionsInsideOneClassNotOrdered = 0;
+
         for (Map.Entry<File, List<INDArray>> entry : entries) {
             wrongPredictionsWithOtherClasses += compareWithOtherClasses(entries, entry);
             wrongPredictionsInsideOneClassOrdered += compareInsideOneClassOrdered(entry);
@@ -140,26 +139,37 @@ public class TestModels {
     }
 
     @NotNull
-    private static HashMap<File, List<INDArray>> buildEmbeddings(ComputationGraph vgg16) throws IOException {
+    private static Map<File, List<INDArray>> buildEmbeddings(ComputationGraph model) throws IOException {
         File[] folders = new File(TEST_DATA).listFiles();
-        HashMap<File, List<INDArray>> map = new HashMap<>();
+        Map<File, List<INDArray>> map = new HashMap<>();
+
+
         for (File folder : folders) {
             File[] carsInOneClass = folder.listFiles();
-            Arrays.sort(carsInOneClass, (f1, f2) -> Long.valueOf(f1.lastModified())
-                    .compareTo(f2.lastModified()));
-            ArrayList<INDArray> indArrays = new ArrayList<>();
-            for (File imageInsideOneClass : carsInOneClass) {
-                indArrays.add(getEmbeddings(vgg16, imageInsideOneClass));
-            }
-            map.put(folder, indArrays);
+
+            Arrays.sort(carsInOneClass, Comparator.comparing(File::getName));
+
+            Map<File, INDArray> fileEmbeddings = new TreeMap<>(Comparator.comparing(File::getName));
+            Stream.of(carsInOneClass).forEach(inOneClass -> {
+                try {
+                    INDArray embeddings = getEmbeddings(model,
+                            inOneClass);
+                    fileEmbeddings.put(inOneClass, embeddings);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+
+            map.put(folder, new ArrayList<>(fileEmbeddings.values()));
         }
+
         return map;
     }
 
     private static INDArray getEmbeddings(ComputationGraph vgg16, File image) throws IOException {
         INDArray indArray = LOADER.asMatrix(image);
         IMAGE_PRE_PROCESSOR.preProcess(indArray);
-        Map<String, INDArray> stringINDArrayMap = vgg16.feedForward(indArray, false);
+        Map<String, INDArray> stringINDArrayMap = vgg16.feedForward(indArray,false);
         INDArray embeddings = stringINDArrayMap.get("embeddings");
         return embeddings;
     }
