@@ -2,6 +2,7 @@ package ramo.klevis.ml.tracking.cifar;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.datavec.image.loader.NativeImageLoader;
 import org.deeplearning4j.eval.Evaluation;
 import org.deeplearning4j.nn.graph.ComputationGraph;
@@ -14,14 +15,13 @@ import ramo.klevis.ml.tracking.ImageUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.stream.Stream;
 
 
 /**
  * Created by klevis.ramo on 10/19/2018
  */
-
+@Slf4j
 public class TestModels {
 
     private static final String BASE = "CarTracking/src/main/resources/models/";
@@ -29,24 +29,20 @@ public class TestModels {
     private static final double THRESHOLD = 0.85;
     private static final CifarImagePreProcessor IMAGE_PRE_PROCESSOR = new CifarImagePreProcessor();
     private static final NativeImageLoader LOADER = new NativeImageLoader(ImageUtils.HEIGHT, ImageUtils.WIDTH, 3);
-    private static boolean showTrainingPrecision = false;
+    private static boolean showTrainingPrecision = true;
 
     public static void main(String[] args) throws IOException {
         String[] allModels = new File(BASE).list();
-//        allModels = new String[]{"96_data.zip",
-//                "189_epoch_data_n189d_b64_135.zip",
-//                "611_epoch_data_e1024_b512_180.zip"};
         for (String model : allModels) {
             ComputationGraph vgg16 = ModelSerializer.restoreComputationGraph(
                     new File(BASE + model));
-
             String classesNumber = model.substring(0, model.indexOf("_"));
+            log.info(vgg16.summary());
             if (showTrainingPrecision) {
                 showTrainingPrecision(vgg16, classesNumber);
             }
-//            System.out.println(vgg16.summary());
             TestResult testResult = test(vgg16, model);
-            System.out.println(testResult);
+            log.info(testResult.toString());
         }
     }
 
@@ -57,7 +53,7 @@ public class TestModels {
                 DataSetIterator dataSetIterator = ImageUtils.createDataSetIterator(carTracking,
                         Integer.parseInt(classesNumber), 64);
                 Evaluation eval = vgg16.evaluate(dataSetIterator);
-                System.out.println(eval.stats());
+                log.info(eval.stats());
             }
         }
     }
@@ -67,30 +63,21 @@ public class TestModels {
 
         Set<Map.Entry<File, List<INDArray>>> entries = map.entrySet();
         int wrongPredictionsWithOtherClasses = 0;
-        int wrongPredictionsInsideOneClassOrdered = 0;
-        int wrongPredictionsInsideOneClassNotOrdered = 0;
+        int wrongPredictionsInOneClassSequentially = 0;
 
         for (Map.Entry<File, List<INDArray>> entry : entries) {
             wrongPredictionsWithOtherClasses += compareWithOtherClasses(entries, entry);
-            wrongPredictionsInsideOneClassOrdered += compareInsideOneClassOrdered(entry);
-            wrongPredictionsInsideOneClassNotOrdered += compareInsideOneClassNotOrdered(entry);
+            wrongPredictionsInOneClassSequentially += compareInsideOneClassSequentially(entry);
         }
         return new TestResult(
                 model,
-                wrongPredictionsInsideOneClassOrdered,
-                wrongPredictionsInsideOneClassNotOrdered,
+                wrongPredictionsInOneClassSequentially,
                 wrongPredictionsWithOtherClasses,
-                sum(wrongPredictionsWithOtherClasses,
-                        wrongPredictionsInsideOneClassOrdered,
-                        wrongPredictionsInsideOneClassNotOrdered));
+                wrongPredictionsWithOtherClasses +
+                        wrongPredictionsInOneClassSequentially);
     }
 
-    private static int sum(int wrongPredictionsWithOtherClasses, int wrongPredictionsInsideOneClassOrdered, int wrongPredictionsInsideOneClassNotOrdered) {
-        return wrongPredictionsInsideOneClassOrdered + wrongPredictionsInsideOneClassNotOrdered +
-                wrongPredictionsWithOtherClasses;
-    }
-
-    private static int compareInsideOneClassOrdered(Map.Entry<File, List<INDArray>> entry) {
+    private static int compareInsideOneClassSequentially(Map.Entry<File, List<INDArray>> entry) {
         int wrongPredictionsInsideOneClassOrdered = 0;
         List<INDArray> value = entry.getValue();
         INDArray prevEmbeddings = value.get(0);
@@ -103,22 +90,8 @@ public class TestModels {
         return wrongPredictionsInsideOneClassOrdered;
     }
 
-    private static int compareInsideOneClassNotOrdered(Map.Entry<File, List<INDArray>> entry) {
-        int wrongPredictionsInsideOneClassNotOrdered = 0;
-        List<INDArray> value = entry.getValue();
-        Collections.shuffle(value);
-        for (INDArray indArray : value) {
-            for (INDArray array : value) {
-                if (indArray.distance2(array) >= THRESHOLD) {
-                    wrongPredictionsInsideOneClassNotOrdered++;
-                }
-            }
-        }
-        return wrongPredictionsInsideOneClassNotOrdered;
-    }
-
-
-    private static int compareWithOtherClasses(Set<Map.Entry<File, List<INDArray>>> entries, Map.Entry<File, List<INDArray>> entry) {
+    private static int compareWithOtherClasses(Set<Map.Entry<File, List<INDArray>>> entries,
+                                               Map.Entry<File, List<INDArray>> entry) {
         int misMatch = 0;
         File folder = entry.getKey();
         List<INDArray> currentEmbeddingsList = entry.getValue();
@@ -169,7 +142,7 @@ public class TestModels {
     private static INDArray getEmbeddings(ComputationGraph vgg16, File image) throws IOException {
         INDArray indArray = LOADER.asMatrix(image);
         IMAGE_PRE_PROCESSOR.preProcess(indArray);
-        Map<String, INDArray> stringINDArrayMap = vgg16.feedForward(indArray,false);
+        Map<String, INDArray> stringINDArrayMap = vgg16.feedForward(indArray, false);
         INDArray embeddings = stringINDArrayMap.get("embeddings");
         return embeddings;
     }
@@ -178,8 +151,7 @@ public class TestModels {
     @Data
     static class TestResult {
         String model;
-        int wrongPredictionsInsideOneClassSequentially;
-        int wrongPredictionsInsideOneClassNotSequentially;
+        int wrongPredictionsInOneClassSequentially;
         int wrongPredictionsWithOtherClasses;
         int total;
     }
