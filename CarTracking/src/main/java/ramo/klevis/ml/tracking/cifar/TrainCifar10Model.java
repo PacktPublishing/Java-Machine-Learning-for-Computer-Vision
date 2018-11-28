@@ -82,6 +82,7 @@ public class TrainCifar10Model implements Serializable {
         log.info(vgg16.summary());
 
         IUpdater iUpdaterWithDefaultConfig = Updater.ADAM.getIUpdaterWithDefaultConfig();
+        iUpdaterWithDefaultConfig.setLrAndSchedule(0.1, null);
         FineTuneConfiguration fineTuneConf = new FineTuneConfiguration.Builder()
                 .seed(1234)
 //                .weightInit(WeightInit.XAVIER)
@@ -153,8 +154,8 @@ public class TrainCifar10Model implements Serializable {
             log.info(eval.stats());
             testIterator.reset();
         }
-        TestModels.TestResult test = TestModels.test(cifar10, modelName);
-        log.info("Test Results >> " + test);
+//        TestModels.TestResult test = TestModels.test(cifar10, modelName);
+//        log.info("Test Results >> " + test);
     }
 
     private void saveProgress(ComputationGraph cifar10, int iEpoch, String modelName) throws IOException {
