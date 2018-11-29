@@ -23,17 +23,20 @@
             <version>${dl4j.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-cuda-9.2-platform</artifactId>
-            <version>${dl4j.version}</version>
-        </dependency>
+        <!--Uncomment in case  NVIDIA is GPU available-->
+        <!--
 
-        <dependency>
-            <groupId>org.deeplearning4j</groupId>
-            <artifactId>deeplearning4j-cuda-9.2</artifactId>
-            <version>${dl4j.version}</version>
-        </dependency>
+           <dependency>
+                    <groupId>org.nd4j</groupId>
+                    <artifactId>nd4j-cuda-9.2-platform</artifactId>
+                    <version>${dl4j.version}</version>
+                </dependency>
+
+                <dependency>
+                    <groupId>org.deeplearning4j</groupId>
+                    <artifactId>deeplearning4j-cuda-9.2</artifactId>
+                    <version>${dl4j.version}</version>
+                </dependency>-->
 
         <dependency>
             <groupId>org.deeplearning4j</groupId>
