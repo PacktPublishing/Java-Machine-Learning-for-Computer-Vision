@@ -7,7 +7,6 @@ import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.nn.layers.objdetect.DetectedObject;
 import org.deeplearning4j.nn.layers.objdetect.Yolo2OutputLayer;
 import org.deeplearning4j.nn.layers.objdetect.YoloUtils;
-import org.deeplearning4j.zoo.model.TinyYOLO;
 import org.deeplearning4j.zoo.model.YOLO2;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.api.preprocessor.ImagePreProcessingScaler;
@@ -18,21 +17,11 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Stack;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static org.bytedeco.javacpp.opencv_core.FONT_HERSHEY_DUPLEX;
-import static org.bytedeco.javacpp.opencv_core.Mat;
-import static org.bytedeco.javacpp.opencv_core.Point;
-import static org.bytedeco.javacpp.opencv_core.Scalar;
+import static org.bytedeco.javacpp.opencv_core.*;
 import static org.bytedeco.javacpp.opencv_highgui.imshow;
 import static org.bytedeco.javacpp.opencv_imgproc.putText;
 import static org.bytedeco.javacpp.opencv_imgproc.rectangle;
@@ -40,8 +29,8 @@ import static org.bytedeco.javacpp.opencv_imgproc.rectangle;
 @Slf4j
 public class Yolo {
 
-    private static final double DETECTION_THRESHOLD = 0.7;
-    private static final double THRESHOLD = 0.85;
+    private static final double YOLO_DETECTION_THRESHOLD = 0.7;
+    private static final double TRACKING_THRESHOLD = 0.85;
     public final String[] COCO_CLASSES = {"person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train",
             "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
             "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag",
@@ -52,12 +41,12 @@ public class Yolo {
             "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
             "teddy bear", "hair drier", "toothbrush"};
     private final Map<String, Stack<Mat>> stackMap = new ConcurrentHashMap<>();
-    private final String[] TINY_COCO_CLASSES = {"aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car",
-            "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant",
-            "sheep", "sofa", "train", "tvmonitor"};
+
     private TrainCifar10Model trainCifar10Model = new TrainCifar10Model();
-    private Speed selectedSpeed;
+    private Speed selectedSpeed = Speed.MEDIUM;
     private boolean outputFrames;
+    private double trackingThreshold = TRACKING_THRESHOLD;
+    private String preTrainedCifarModel;
     private volatile List<MarkedObject> predictedObjects = new ConcurrentArrayList<>();
     private volatile Set<MarkedObject> previousPredictedObjects = new TreeSet<>();
 
@@ -66,37 +55,28 @@ public class Yolo {
     private Map<String, ComputationGraph> modelsMap = new ConcurrentHashMap<>();
     private NativeImageLoader loader;
 
-    public Yolo() throws IOException {
-        trainCifar10Model.loadTrainedModel();
-    }
-
-
-    public void initialize(Speed selectedSpeed, boolean yolo, String windowName,
-                           boolean outputFrames) throws IOException {
-        this.selectedSpeed = selectedSpeed;
+    public void initialize(String windowName,
+                           boolean outputFrames,
+                           double threshold,
+                           String model) throws IOException {
         this.outputFrames = outputFrames;
+        this.preTrainedCifarModel = model;
         stackMap.put(windowName, new Stack<>());
-        ComputationGraph yoloV2;
-        if (yolo) {
-            //real yolo v2
-            yoloV2 = (ComputationGraph) YOLO2.builder().build().initPretrained();
-            prepareYOLOLabels();
-        } else {
-            //tiny yolo
-            yoloV2 = (ComputationGraph) TinyYOLO.builder().build().initPretrained();
-            prepareTinyYOLOLabels();
-        }
-        modelsMap.put(windowName, yoloV2);
+        ComputationGraph yolo = (ComputationGraph) YOLO2.builder().build().initPretrained();
+        prepareYOLOLabels();
+
+        trainCifar10Model.loadTrainedModel(preTrainedCifarModel);
+        modelsMap.put(windowName, yolo);
         loader = new NativeImageLoader(selectedSpeed.height, selectedSpeed.width, 3);
-        warmUp(yoloV2);
+        warmUp(yolo);
     }
 
     private void warmUp(ComputationGraph model) throws IOException {
         Yolo2OutputLayer outputLayer = (Yolo2OutputLayer) model.getOutputLayer(0);
-        BufferedImage read = ImageIO.read(new File("AutonomousDriving/src/main/resources/sample.jpg"));
+        BufferedImage read = ImageIO.read(new File("CarTracking/src/main/resources/sample.jpg"));
         INDArray indArray = prepareImage(loader.asMatrix(read));
         INDArray results = model.outputSingle(indArray);
-        outputLayer.getPredictedObjects(results, DETECTION_THRESHOLD);
+        outputLayer.getPredictedObjects(results, YOLO_DETECTION_THRESHOLD);
     }
 
     public void push(Mat matFrame, String windowName) {
@@ -110,10 +90,9 @@ public class Yolo {
         }
         ArrayList<MarkedObject> detectedObjects = predictedObjects == null ? new ArrayList<>() : new ArrayList<>(predictedObjects);
 
-        Set<String> usedIds = new HashSet<>();
-        for (MarkedObject markedObjects1 : detectedObjects) {
+        for (MarkedObject markedObjects : detectedObjects) {
             try {
-                createBoundingBoxRectangle(matFrame, selectedSpeed.width, selectedSpeed.height, markedObjects1, usedIds);
+                createBoundingBoxRectangle(matFrame, markedObjects);
                 imshow(windowName, matFrame);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -146,7 +125,7 @@ public class Yolo {
         if (results == null) {
             return;
         }
-        List<DetectedObject> predictedObjects = outputLayer.getPredictedObjects(results, DETECTION_THRESHOLD);
+        List<DetectedObject> predictedObjects = outputLayer.getPredictedObjects(results, YOLO_DETECTION_THRESHOLD);
         YoloUtils.nms(predictedObjects, 0.5);
         List<MarkedObject> markedObjects = predictedObjects.stream()
                 .filter(e -> groupMap.get(map.get(e.getPredictedClass())) != null)
@@ -207,45 +186,41 @@ public class Yolo {
         }
     }
 
-    private void prepareTinyYOLOLabels() {
-        prepareLabels(TINY_COCO_CLASSES);
-    }
-
-    private void createBoundingBoxRectangle(Mat file, int w, int h, MarkedObject obj,
-                                            Set<String> usedIds) throws Exception {
+    private void createBoundingBoxRectangle(Mat file, MarkedObject obj) throws Exception {
         double[] xy1 = obj.getDetectedObject().getTopLeftXY();
         double[] xy2 = obj.getDetectedObject().getBottomRightXY();
         String id;
         MarkedObject minDistanceMarkedObject = null;
-        double min = Double.MAX_VALUE;
 
         for (MarkedObject predictedObject : previousPredictedObjects) {
 
             double distance = predictedObject.getL2Norm().distance2(obj.getL2Norm());
+            System.out.println("distance = " + distance);
             if (YoloUtils.iou(obj.getDetectedObject(),
-                    predictedObject.getDetectedObject()) >= 0.4 && distance <= 1.1) {
+                    predictedObject.getDetectedObject()) >= 0.4 && distance <= trackingThreshold) {
                 minDistanceMarkedObject = predictedObject;
                 obj.setId(minDistanceMarkedObject.getId());
                 break;
 
             }
-            System.out.println("distance 1 = " + distance);
-            if (distance < min && distance < THRESHOLD &&
-                    !usedIds.contains(predictedObject.getId())) {
-                minDistanceMarkedObject = predictedObject;
-                min = distance;
-                obj.setId(minDistanceMarkedObject.getId());
-            }
+//            System.out.println("distance 1 = " + distance);
+//            if (distance < min && distance < trackingThreshold &&
+//                    !usedIds.contains(predictedObject.getId())) {
+//                minDistanceMarkedObject = predictedObject;
+//                min = distance;
+//                obj.setId(minDistanceMarkedObject.getId());
+//            }
         }
         if (minDistanceMarkedObject == null) {
             minDistanceMarkedObject = obj;
         }
 
         id = minDistanceMarkedObject.getId();
-        usedIds.add(id);
 
         int predictedClass = obj.getDetectedObject().getPredictedClass();
 
+        int w = selectedSpeed.width;
+        int h = selectedSpeed.height;
         int x1 = (int) Math.round(w * xy1[0] / selectedSpeed.gridWidth);
         int y1 = (int) Math.round(h * xy1[1] / selectedSpeed.gridHeight);
         int x2 = (int) Math.round(w * xy2[0] / selectedSpeed.gridWidth);
@@ -254,6 +229,11 @@ public class Yolo {
         rectangle(file, new Point(x1, y1), new Point(x2, y2), Scalar.BLUE);
         putText(file, groupMap.get(map.get(predictedClass)) + "-" + id, new Point(x1 + 2, y2 - 2), FONT_HERSHEY_DUPLEX, 0.8, Scalar.GREEN);
 
+    }
+
+
+    public Speed getSelectedSpeed() {
+        return selectedSpeed;
     }
 
 }

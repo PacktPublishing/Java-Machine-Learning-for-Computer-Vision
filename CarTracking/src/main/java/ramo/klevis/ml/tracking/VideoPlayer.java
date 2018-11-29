@@ -23,27 +23,28 @@ public class VideoPlayer {
     private Yolo yolo = new Yolo();
     private final CountDownLatch countDownLatch;
     private volatile boolean stop = false;
-    private Speed selectedIndex;
 
     public VideoPlayer() throws IOException {
         countDownLatch = new CountDownLatch(2);
     }
 
-    public void startRealTimeVideoDetection(String videoFileName, String windowName,
-                                            Speed selectedIndex,
-                                            boolean realYolo,
-                                            boolean outputFrames) throws Exception {
-        this.selectedIndex = selectedIndex;
+    public void startRealTimeVideoDetection(String videoFileName,
+                                            String windowName,
+                                            boolean outputFrames,
+                                            double threshold,
+                                            String model) throws Exception {
         log.info("Start detecting video " + videoFileName);
         log.info(windowName);
-        yolo.initialize(selectedIndex, realYolo, windowName,outputFrames);
+        yolo.initialize(windowName, outputFrames, threshold, model);
         startYoloThread(yolo, windowName);
         countDownLatch.countDown();
         runVideoMainThread(yolo, windowName, videoFileName, converter);
 
     }
 
-    private void runVideoMainThread(Yolo yolo, String windowName, String videoFileName, OpenCVFrameConverter.ToMat toMat) throws Exception {
+    private void runVideoMainThread(Yolo yolo, String windowName,
+                                    String videoFileName,
+                                    OpenCVFrameConverter.ToMat toMat) throws Exception {
         FFmpegFrameGrabber grabber = initFrameGrabber(videoFileName);
         while (!stop) {
             Frame frame = grabber.grab();
@@ -59,10 +60,10 @@ public class VideoPlayer {
 
             Thread.sleep(60);
             opencv_core.Mat mat = toMat.convert(frame);
-            opencv_core.Mat resizeMat = new opencv_core.Mat(selectedIndex.height, selectedIndex.width, mat.type());
+            opencv_core.Mat resizeMat = new opencv_core.Mat(yolo.getSelectedSpeed().height,
+                    yolo.getSelectedSpeed().width, mat.type());
             yolo.push(resizeMat, windowName);
             org.bytedeco.javacpp.opencv_imgproc.resize(mat, resizeMat, resizeMat.size());
-//            yolo.predictBoundingBoxes(windowName);
             yolo.drawBoundingBoxesRectangles(frame, resizeMat, windowName);
             char key = (char) waitKey(20);
             // Exit this loop on escape:

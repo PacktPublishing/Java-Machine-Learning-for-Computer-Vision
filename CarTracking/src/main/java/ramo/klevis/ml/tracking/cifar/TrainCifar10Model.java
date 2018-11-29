@@ -51,8 +51,9 @@ import java.util.Map;
 @Slf4j
 public class TrainCifar10Model implements Serializable {
 
-    public static final int NUM_POSSIBLE_LABELS = 631;
+    public static final int NUM_POSSIBLE_LABELS = 611;
     public static final int BATCH_SIZE = 256;
+    public static final int E_BATCH_SIZE = 256;
     private static final DataNormalization IMAGE_PRE_PROCESSOR = new CifarImagePreProcessor();
     private static final NativeImageLoader LOADER = new NativeImageLoader(ImageUtils.HEIGHT, ImageUtils.WIDTH, 3);
     private static final String CONTENT_LAYER_NAME = "embeddings";
@@ -62,8 +63,8 @@ public class TrainCifar10Model implements Serializable {
     private static final int EPOCH_TRAINING = 2400;
     public static final int EMBEDDINGS = 512;
     public static final int I_EPOCH = 0;
-    public static final double LAMBDA = 1e-4;
-    private static final String PREFIX = "C" + ImageUtils.HEIGHT + "_" + LAMBDA + "_";
+    public static final double LAMBDA = 5e-4;
+    private static final String PREFIX = "EXP";
     private ComputationGraph cifar10Transfer;
 
     public static void main(String[] args) throws IOException {
@@ -168,10 +169,12 @@ public class TrainCifar10Model implements Serializable {
     }
 
 
-    public void loadTrainedModel() throws IOException {
+    public void loadTrainedModel(String preTrainedCifarModel) throws IOException {
+        File file = new File(MODEL_SAVE_PATH +
+                preTrainedCifarModel);
+        log.info("loading model " + file);
         cifar10Transfer = ModelSerializer.
-                restoreComputationGraph(new File(MODEL_SAVE_PATH +
-                        "611_epoch_data_e512_b256_980.zip"));
+                restoreComputationGraph(file);
         log.info(cifar10Transfer.summary());
     }
 

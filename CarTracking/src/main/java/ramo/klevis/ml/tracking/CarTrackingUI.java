@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 /**
  * Created by Klevis Ramo.
@@ -22,27 +23,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CarTrackingUI {
 
     public final static AtomicInteger atomicInteger = new AtomicInteger();
-    private static final int FRAME_WIDTH = 750;
+    private static final int FRAME_WIDTH = 550;
     private static final int FRAME_HEIGHT = 220;
     private static final Font FONT = new Font("Dialog", Font.BOLD, 18);
     private static final Font FONT_ITALIC = new Font("Dialog", Font.ITALIC, 18);
-    private static final String AUTONOMOUS_DRIVING_RAMOK_TECH = "Autonomous Driving(ramok.tech)";
+    private static final String AUTONOMOUS_DRIVING_RAMOK_TECH = "Car Tracking (ramok.tech)";
     private JFrame mainFrame;
     private JPanel mainPanel;
-    private File selectedFile = new File("AutonomousDriving/src/main/resources/videoSample.mp4");
+    private File selectedFile = new File("CarTracking/src/main/resources/videoSample.mp4");
     private VideoPlayer videoPlayer;
     private ProgressBar progressBar;
-    private JRadioButton yolo;
+    private JComboBox<String> chooseCifar10Model;
+    private JSpinner threshold;
 
     public void initUI() throws Exception {
         adjustLookAndFeel();
         mainFrame = createMainFrame();
         mainPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        yoloChooser();
-        final JComboBox<Speed> choose = speedChooser();
 
         JPanel actionPanel = new JPanel();
         actionPanel.setBorder(BorderFactory.createTitledBorder(""));
+
         JButton chooseVideo = new JButton("Choose Video");
         chooseVideo.setBackground(Color.ORANGE.darker());
         chooseVideo.setForeground(Color.ORANGE.darker());
@@ -61,12 +62,11 @@ public class CarTrackingUI {
                     videoPlayer = new VideoPlayer();
                     Runnable runnable1 = () -> {
                         try {
-                            String absolutePath = selectedFile.getAbsolutePath();
-                            System.out.println("absolutePath = " + absolutePath);
-                            videoPlayer.startRealTimeVideoDetection(absolutePath,
-                                    "1" + atomicInteger.incrementAndGet(),
-                                    (Speed) choose.getSelectedItem(),
-                                    yolo.isSelected(), false);
+                            videoPlayer.startRealTimeVideoDetection(selectedFile.getAbsolutePath(),
+                                    String.valueOf(atomicInteger.incrementAndGet()),
+                                    false,
+                                    (Double) threshold.getValue(),
+                                    (String) chooseCifar10Model.getSelectedItem());
                         } catch (Exception e1) {
                             e1.printStackTrace();
 
@@ -99,62 +99,36 @@ public class CarTrackingUI {
         actionPanel.add(stop);
 
         mainPanel.add(actionPanel);
+
+        chooseCifar10Model = new JComboBox<>();
+        chooseCifar10Model.setForeground(Color.BLUE);
+        Stream.of(new File("CarTracking/src/main/resources/models").listFiles())
+                .forEach(e -> chooseCifar10Model.addItem(e.getName()));
+        JLabel label = new JLabel("Cifar-10 model");
+        label.setForeground(Color.BLUE);
+        mainPanel.add(label);
+        mainPanel.add(chooseCifar10Model);
+
+        label = new JLabel("Threshold");
+        label.setForeground(Color.DARK_GRAY);
+        threshold = new JSpinner(new SpinnerNumberModel(0.9, 0.1, 2, 0.1));
+        threshold.setFont(FONT_ITALIC);
+        mainPanel.add(label);
+        mainPanel.add(threshold);
+
         addSignature();
 
         mainFrame.add(mainPanel, BorderLayout.CENTER);
         mainFrame.setVisible(true);
 
-       /* File[] videos = new File("AutonomousDriving/src/main/resources/videos").listFiles();
-        for (File file : videos) {
-
-            new VideoPlayer().startRealTimeVideoDetection(file.getAbsolutePath(),
-                    file.getName() + atomicInteger.incrementAndGet(), Speed.MEDIUM, true);
-        }*/
-
-    }
-
-    private void yoloChooser() {
-        JPanel panel = new JPanel(new GridLayout(0, 2));
-        Border border = BorderFactory.createTitledBorder("Choose Yolo");
-        ((TitledBorder) border).setTitleFont(FONT_ITALIC);
-        panel.setBorder(border);
-        ButtonGroup group = new ButtonGroup();
-        yolo = new JRadioButton("Load Real Yolo");
-        yolo.setFont(FONT);
-        group.add(yolo);
-        panel.add(yolo);
-        JRadioButton tinyYolo = new JRadioButton("Tiny Yolo");
-        tinyYolo.setSelected(true);
-        panel.add(tinyYolo);
-        group.add(tinyYolo);
-        tinyYolo.setFont(FONT);
-        mainPanel.add(panel);
     }
 
     private void adjustLookAndFeel() throws ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         UIManager.put("Button.font", new FontUIResource(FONT));
+        UIManager.put("Label.font", new FontUIResource(FONT_ITALIC));
         UIManager.put("ComboBox.font", new FontUIResource(FONT_ITALIC));
         UIManager.put("ProgressBar.font", new FontUIResource(FONT));
-    }
-
-    @NotNull
-    private JComboBox<Speed> speedChooser() {
-        JPanel panel = new JPanel();
-        TitledBorder speed = BorderFactory.createTitledBorder("Speed");
-        speed.setTitleFont(FONT_ITALIC);
-        speed.setTitleColor(Color.BLUE.darker());
-        panel.setBorder(speed);
-        mainPanel.add(panel);
-        JComboBox<Speed> choose = new JComboBox<>();
-        choose.setBackground(Color.BLUE.darker());
-        choose.setForeground(Color.BLUE.darker());
-        choose.addItem(Speed.FAST);
-        choose.addItem(Speed.MEDIUM);
-        choose.addItem(Speed.SLOW);
-        choose.setSelectedIndex(2);
-        panel.add(choose);
-        return choose;
     }
 
     public void chooseFileAction() {
@@ -172,6 +146,7 @@ public class CarTrackingUI {
         mainFrame.setTitle("Autonomous Driving");
         mainFrame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         mainFrame.setSize(FRAME_WIDTH, FRAME_HEIGHT);
+        mainFrame.setMaximumSize(new Dimension(FRAME_WIDTH, FRAME_HEIGHT));
         mainFrame.setLocationRelativeTo(null);
         mainFrame.addWindowListener(new WindowAdapter() {
             @Override
