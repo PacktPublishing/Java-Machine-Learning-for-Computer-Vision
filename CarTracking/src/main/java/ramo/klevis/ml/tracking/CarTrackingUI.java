@@ -2,6 +2,7 @@ package ramo.klevis.ml.tracking;
 
 import org.jetbrains.annotations.NotNull;
 import ramo.klevis.ml.tracking.yolo.Speed;
+import ramo.klevis.ml.tracking.yolo.Strategy;
 import ramo.klevis.ml.ui.ProgressBar;
 
 import javax.swing.*;
@@ -35,6 +36,7 @@ public class CarTrackingUI {
     private ProgressBar progressBar;
     private JComboBox<String> chooseCifar10Model;
     private JSpinner threshold;
+    private JComboBox<Strategy> strategy;
 
     public void initUI() throws Exception {
         adjustLookAndFeel();
@@ -62,11 +64,14 @@ public class CarTrackingUI {
                     videoPlayer = new VideoPlayer();
                     Runnable runnable1 = () -> {
                         try {
-                            videoPlayer.startRealTimeVideoDetection(selectedFile.getAbsolutePath(),
+                            videoPlayer.startRealTimeVideoDetection(
+                                    selectedFile.getAbsolutePath(),
                                     String.valueOf(atomicInteger.incrementAndGet()),
                                     false,
                                     (Double) threshold.getValue(),
-                                    (String) chooseCifar10Model.getSelectedItem());
+                                    (String) chooseCifar10Model.getSelectedItem(),
+                                    (Strategy) strategy.getSelectedItem()
+                            );
                         } catch (Exception e1) {
                             e1.printStackTrace();
 
@@ -115,6 +120,10 @@ public class CarTrackingUI {
         threshold.setFont(FONT_ITALIC);
         mainPanel.add(label);
         mainPanel.add(threshold);
+
+        strategy = new JComboBox<>();
+        Stream.of(Strategy.values()).forEach(e -> strategy.addItem(e));
+        mainPanel.add(strategy);
 
         addSignature();
 

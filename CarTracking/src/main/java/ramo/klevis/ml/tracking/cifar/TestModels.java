@@ -29,13 +29,11 @@ public class TestModels {
     private static final double THRESHOLD = 0.85;
     private static final CifarImagePreProcessor IMAGE_PRE_PROCESSOR = new CifarImagePreProcessor();
     private static final NativeImageLoader LOADER = new NativeImageLoader(ImageUtils.HEIGHT, ImageUtils.WIDTH, 3);
-    private static boolean showTrainingPrecision = true;
+    private static boolean showTrainingPrecision = false;
+
 
     public static void main(String[] args) throws IOException {
         String[] allModels = new File(BASE).list();
-//        allModels=new String[]{
-//                "631_epoch_data_e512_b256_600.zip"
-//        };
         for (String model : allModels) {
             ComputationGraph vgg16 = ModelSerializer.restoreComputationGraph(
                     new File(BASE + model));

@@ -6,7 +6,7 @@ import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
 import org.bytedeco.javacv.OpenCVFrameConverter;
-import ramo.klevis.ml.tracking.yolo.Speed;
+import ramo.klevis.ml.tracking.yolo.Strategy;
 import ramo.klevis.ml.tracking.yolo.Yolo;
 
 import java.io.File;
@@ -32,10 +32,10 @@ public class VideoPlayer {
                                             String windowName,
                                             boolean outputFrames,
                                             double threshold,
-                                            String model) throws Exception {
+                                            String model, Strategy selectedItem) throws Exception {
         log.info("Start detecting video " + videoFileName);
         log.info(windowName);
-        yolo.initialize(windowName, outputFrames, threshold, model);
+        yolo.initialize(windowName, outputFrames, threshold, model,selectedItem);
         startYoloThread(yolo, windowName);
         countDownLatch.countDown();
         runVideoMainThread(yolo, windowName, videoFileName, converter);

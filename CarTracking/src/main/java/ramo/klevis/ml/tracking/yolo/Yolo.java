@@ -8,6 +8,7 @@ import org.deeplearning4j.nn.layers.objdetect.DetectedObject;
 import org.deeplearning4j.nn.layers.objdetect.Yolo2OutputLayer;
 import org.deeplearning4j.nn.layers.objdetect.YoloUtils;
 import org.deeplearning4j.zoo.model.YOLO2;
+import org.jetbrains.annotations.Nullable;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.api.preprocessor.ImagePreProcessingScaler;
 import org.threadly.concurrent.collections.ConcurrentArrayList;
@@ -47,6 +48,7 @@ public class Yolo {
     private boolean outputFrames;
     private double trackingThreshold = TRACKING_THRESHOLD;
     private String preTrainedCifarModel;
+    private Strategy strategy;
     private volatile List<MarkedObject> predictedObjects = new ConcurrentArrayList<>();
     private volatile Set<MarkedObject> previousPredictedObjects = new TreeSet<>();
 
@@ -58,9 +60,10 @@ public class Yolo {
     public void initialize(String windowName,
                            boolean outputFrames,
                            double threshold,
-                           String model) throws IOException {
+                           String model, Strategy strategy) throws IOException {
         this.outputFrames = outputFrames;
         this.preTrainedCifarModel = model;
+        this.strategy = strategy;
         stackMap.put(windowName, new Stack<>());
         ComputationGraph yolo = (ComputationGraph) YOLO2.builder().build().initPretrained();
         prepareYOLOLabels();
@@ -189,33 +192,14 @@ public class Yolo {
     private void createBoundingBoxRectangle(Mat file, MarkedObject obj) throws Exception {
         double[] xy1 = obj.getDetectedObject().getTopLeftXY();
         double[] xy2 = obj.getDetectedObject().getBottomRightXY();
-        String id;
-        MarkedObject minDistanceMarkedObject = null;
+        MarkedObject minDistanceMarkedObject = findExistingCarMatch(obj);
 
-        for (MarkedObject predictedObject : previousPredictedObjects) {
-
-            double distance = predictedObject.getL2Norm().distance2(obj.getL2Norm());
-            System.out.println("distance = " + distance);
-            if (YoloUtils.iou(obj.getDetectedObject(),
-                    predictedObject.getDetectedObject()) >= 0.4 && distance <= trackingThreshold) {
-                minDistanceMarkedObject = predictedObject;
-                obj.setId(minDistanceMarkedObject.getId());
-                break;
-
-            }
-//            System.out.println("distance 1 = " + distance);
-//            if (distance < min && distance < trackingThreshold &&
-//                    !usedIds.contains(predictedObject.getId())) {
-//                minDistanceMarkedObject = predictedObject;
-//                min = distance;
-//                obj.setId(minDistanceMarkedObject.getId());
-//            }
-        }
         if (minDistanceMarkedObject == null) {
+            //no match found
             minDistanceMarkedObject = obj;
         }
 
-        id = minDistanceMarkedObject.getId();
+        String id = minDistanceMarkedObject.getId();
 
         int predictedClass = obj.getDetectedObject().getPredictedClass();
 
@@ -229,6 +213,39 @@ public class Yolo {
         rectangle(file, new Point(x1, y1), new Point(x2, y2), Scalar.BLUE);
         putText(file, groupMap.get(map.get(predictedClass)) + "-" + id, new Point(x1 + 2, y2 - 2), FONT_HERSHEY_DUPLEX, 0.8, Scalar.GREEN);
 
+    }
+
+    @Nullable
+    private MarkedObject findExistingCarMatch(MarkedObject obj) {
+        MarkedObject minDistanceMarkedObject = null;
+        double minDistance = Double.MAX_VALUE;
+
+        for (MarkedObject predictedObject : previousPredictedObjects) {
+            double distance = predictedObject.getL2Norm().distance2(obj.getL2Norm());
+            if (strategy == Strategy.IoU_PLUS_ENCODINGS) {
+                if (YoloUtils.iou(obj.getDetectedObject(),
+                        predictedObject.getDetectedObject()) >= 0.4
+                        && distance <= trackingThreshold) {
+                    minDistanceMarkedObject = predictedObject;
+                    obj.setId(minDistanceMarkedObject.getId());
+                    break;
+                }
+            } else if (strategy == Strategy.ONLY_ENCODINGS) {
+                if (distance <= trackingThreshold && distance < minDistance) {
+                    minDistanceMarkedObject = predictedObject;
+                    minDistance = distance;
+                    obj.setId(minDistanceMarkedObject.getId());
+                }
+            } else if (strategy == Strategy.ONLY_IoU) {
+                if (YoloUtils.iou(obj.getDetectedObject(),
+                        predictedObject.getDetectedObject()) >= 0.4) {
+                    minDistanceMarkedObject = predictedObject;
+                    obj.setId(minDistanceMarkedObject.getId());
+                    break;
+                }
+            }
+        }
+        return minDistanceMarkedObject;
     }
 
 
