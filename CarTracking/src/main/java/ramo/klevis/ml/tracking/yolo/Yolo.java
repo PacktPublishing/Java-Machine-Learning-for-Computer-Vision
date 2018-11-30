@@ -31,7 +31,6 @@ import static org.bytedeco.javacpp.opencv_imgproc.rectangle;
 public class Yolo {
 
     private static final double YOLO_DETECTION_THRESHOLD = 0.7;
-    private static final double TRACKING_THRESHOLD = 0.85;
     public final String[] COCO_CLASSES = {"person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train",
             "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
             "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag",
@@ -46,7 +45,7 @@ public class Yolo {
     private TrainCifar10Model trainCifar10Model = new TrainCifar10Model();
     private Speed selectedSpeed = Speed.MEDIUM;
     private boolean outputFrames;
-    private double trackingThreshold = TRACKING_THRESHOLD;
+    private double trackingThreshold;
     private String preTrainedCifarModel;
     private Strategy strategy;
     private volatile List<MarkedObject> predictedObjects = new ConcurrentArrayList<>();
@@ -61,6 +60,7 @@ public class Yolo {
                            boolean outputFrames,
                            double threshold,
                            String model, Strategy strategy) throws IOException {
+        this.trackingThreshold = threshold;
         this.outputFrames = outputFrames;
         this.preTrainedCifarModel = model;
         this.strategy = strategy;
@@ -218,23 +218,21 @@ public class Yolo {
     @Nullable
     private MarkedObject findExistingCarMatch(MarkedObject obj) {
         MarkedObject minDistanceMarkedObject = null;
-        double minDistance = Double.MAX_VALUE;
-
         for (MarkedObject predictedObject : previousPredictedObjects) {
             double distance = predictedObject.getL2Norm().distance2(obj.getL2Norm());
             if (strategy == Strategy.IoU_PLUS_ENCODINGS) {
                 if (YoloUtils.iou(obj.getDetectedObject(),
-                        predictedObject.getDetectedObject()) >= 0.4
+                        predictedObject.getDetectedObject()) >= 0.5
                         && distance <= trackingThreshold) {
                     minDistanceMarkedObject = predictedObject;
                     obj.setId(minDistanceMarkedObject.getId());
                     break;
                 }
             } else if (strategy == Strategy.ONLY_ENCODINGS) {
-                if (distance <= trackingThreshold && distance < minDistance) {
+                if (distance <= trackingThreshold) {
                     minDistanceMarkedObject = predictedObject;
-                    minDistance = distance;
                     obj.setId(minDistanceMarkedObject.getId());
+                    break;
                 }
             } else if (strategy == Strategy.ONLY_IoU) {
                 if (YoloUtils.iou(obj.getDetectedObject(),
