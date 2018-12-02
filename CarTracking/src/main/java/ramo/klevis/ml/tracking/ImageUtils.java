@@ -59,7 +59,7 @@ public class ImageUtils {
         }
         BufferedImage subimage = image.getSubimage((int) tx, (int) ty, (int) (width * wPixelPerGrid), (int) (height * hPixelPerGrid));
         if (writeCropImageIntoDisk) {
-            ImageIO.write(subimage, "jpg", new File("AutonomousDriving/src/main/resources/videoFrames/"+ System.currentTimeMillis() + ".jpg"));
+            ImageIO.write(subimage, "jpg", new File("CarTracking/src/main/resources/videoFrames/"+ System.currentTimeMillis() + ".jpg"));
         }
         return subimage;
     }

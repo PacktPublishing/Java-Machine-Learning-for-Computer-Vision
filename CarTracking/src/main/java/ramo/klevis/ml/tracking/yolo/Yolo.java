@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.api.preprocessor.ImagePreProcessingScaler;
 import org.threadly.concurrent.collections.ConcurrentArrayList;
+import ramo.klevis.ml.tracking.ImageUtils;
 import ramo.klevis.ml.tracking.cifar.TrainCifar10Model;
 
 import javax.imageio.ImageIO;
@@ -114,7 +115,7 @@ public class Yolo {
         return predictedObjects == null || matFrame == null || frame == null;
     }
 
-    public void predictBoundingBoxes(String windowName) throws IOException {
+    public void predictBoundingBoxes(String windowName) throws Exception {
         long start = System.currentTimeMillis();
         Yolo2OutputLayer outputLayer = (Yolo2OutputLayer) modelsMap.get(windowName).getOutputLayer(0);
         Mat matFrame = stackMap.get(windowName).pop();
@@ -141,7 +142,12 @@ public class Yolo {
                     }
                     return null;
                 }).collect(Collectors.toCollection(() -> new ConcurrentArrayList<>()));
-
+        if (outputFrames) {
+            for (MarkedObject markedObject : markedObjects) {
+                ImageUtils.cropImageWithYolo(selectedSpeed, markedObject.getMatFrame(),
+                        markedObject.getDetectedObject(), outputFrames);
+            }
+        }
         this.predictedObjects = markedObjects;
         log.info("stack of predictions size " + this.predictedObjects.size());
         log.info("Prediction time " + (System.currentTimeMillis() - start) / 1000d);
