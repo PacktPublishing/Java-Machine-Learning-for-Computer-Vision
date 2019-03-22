@@ -1,5 +1,6 @@
 package ramo.klevis.ml.yolo;
 
+import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import ramo.klevis.ml.ui.ProgressBar;
 
@@ -16,6 +17,7 @@ import java.util.concurrent.Executors;
 /**
  * Created by Klevis Ramo.
  */
+@Slf4j
 public class YoloUI {
 
     private static final int FRAME_WIDTH = 750;
@@ -56,6 +58,7 @@ public class YoloUI {
                     videoPlayer = new VideoPlayer();
                     videoPlayer.startRealTimeVideoDetection(selectedFile.getAbsolutePath(), (Speed) choose.getSelectedItem(), yolo.isSelected());
                 } catch (Exception e1) {
+                    log.error("Failed to start", e1);
                     throw new RuntimeException(e1);
                 } finally {
                     progressBar.setVisible(false);

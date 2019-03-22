@@ -68,11 +68,15 @@ public class Yolo {
     }
 
     private void warmUp(Speed selectedSpeed) throws IOException {
-        Yolo2OutputLayer outputLayer = (Yolo2OutputLayer) model.getOutputLayer(0);
-        BufferedImage read = ImageIO.read(new File("AutonomousDriving/src/main/resources/sample.jpg"));
-        INDArray indArray = prepareImage(read, selectedSpeed.width, selectedSpeed.height);
-        INDArray results = model.outputSingle(indArray);
-        outputLayer.getPredictedObjects(results, DETECTION_THRESHOLD);
+        try {
+            Yolo2OutputLayer outputLayer = (Yolo2OutputLayer) model.getOutputLayer(0);
+            BufferedImage read = ImageIO.read(new File("AutonomousDriving/src/main/resources/sample.jpg"));
+            INDArray indArray = prepareImage(read, selectedSpeed.width, selectedSpeed.height);
+            INDArray results = model.outputSingle(indArray);
+            outputLayer.getPredictedObjects(results, DETECTION_THRESHOLD);
+        } catch (IOException e) {
+            log.error("Failed to warm , ignoring for now",e);
+        }
     }
 
     public void push(Frame matFrame) {
